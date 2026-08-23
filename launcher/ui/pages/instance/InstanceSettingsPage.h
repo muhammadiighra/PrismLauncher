@@ -44,10 +44,9 @@ class InstanceSettingsPage : public MinecraftSettingsWidget, public BasePage {
     Q_OBJECT
 
    public:
-    explicit InstanceSettingsPage(MinecraftInstancePtr instance, QWidget* parent = nullptr)
-        : MinecraftSettingsWidget(std::move(instance), parent)
+    explicit InstanceSettingsPage(MinecraftInstance* instance, QWidget* parent = nullptr) : MinecraftSettingsWidget(instance, parent)
     {
-        connect(APPLICATION, &Application::globalSettingsAboutToOpen, this, &InstanceSettingsPage::saveSettings);
+        connect(APPLICATION, &Application::globalSettingsAboutToOpen, this, &InstanceSettingsPage::apply);
         connect(APPLICATION, &Application::globalSettingsApplied, this, &InstanceSettingsPage::loadSettings);
     }
     ~InstanceSettingsPage() override {}
@@ -56,6 +55,7 @@ class InstanceSettingsPage : public MinecraftSettingsWidget, public BasePage {
     QString id() const override { return "settings"; }
     bool apply() override
     {
+        SettingsObject::Lock lock(m_instance->settings());
         saveSettings();
         return true;
     }

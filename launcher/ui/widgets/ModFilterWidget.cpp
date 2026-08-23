@@ -38,7 +38,6 @@
 #include <QComboBox>
 #include <QListWidget>
 #include <algorithm>
-#include <list>
 #include "BaseVersionList.h"
 #include "Json.h"
 #include "Version.h"
@@ -50,9 +49,9 @@
 #include "Application.h"
 #include "minecraft/PackProfile.h"
 
-std::unique_ptr<ModFilterWidget> ModFilterWidget::create(MinecraftInstance* instance, bool extended)
+ModFilterWidget* ModFilterWidget::create(MinecraftInstance* instance, bool extended)
 {
-    return std::unique_ptr<ModFilterWidget>(new ModFilterWidget(instance, extended));
+    return new ModFilterWidget(instance, extended);
 }
 
 class VersionBasicModel : public QIdentityProxyModel {
@@ -138,8 +137,6 @@ ModFilterWidget::ModFilterWidget(MinecraftInstance* instance, bool extended)
         ui->openSource->hide();
     }
 
-    ui->versions->setStyleSheet("combobox-popup: 0;");
-    ui->version->setStyleSheet("combobox-popup: 0;");
     connect(ui->showAllVersions, &QCheckBox::stateChanged, this, &ModFilterWidget::onShowAllVersionsChanged);
     connect(ui->versions, &QComboBox::currentIndexChanged, this, &ModFilterWidget::onVersionFilterChanged);
     connect(ui->versions, &CheckComboBox::checkedItemsChanged, this, [this] { onVersionFilterChanged(0); });
@@ -206,7 +203,7 @@ void ModFilterWidget::loadVersionList()
 
         auto task = m_version_list->getLoadTask();
 
-        connect(task.get(), &Task::failed, [this] {
+        connect(task.get(), &Task::failed, this, [this] {
             ui->versions->setEnabled(false);
             ui->showAllVersions->setEnabled(false);
         });
@@ -227,23 +224,28 @@ void ModFilterWidget::prepareBasicFilter()
     m_filter->openSource = false;
     if (m_instance) {
         m_filter->hideInstalled = false;
-        m_filter->side = ModPlatform::Side::NoSide;  // or "both"
+        m_filter->side = ModPlatform::SideType::NoSide;  // or "both"
         ModPlatform::ModLoaderTypes loaders;
         if (m_instance->settings()->get("OverrideModDownloadLoaders").toBool()) {
             for (auto loader : Json::toStringList(m_instance->settings()->get("ModDownloadLoaders").toString())) {
                 loaders |= ModPlatform::getModLoaderFromString(loader);
             }
         } else {
-            loaders = m_instance->getPackProfile()->getSupportedModLoaders().value();
+            loaders = m_instance->getPackProfile()->getSupportedModLoaders().value_or(ModPlatform::ModLoaderTypes(0));
         }
         ui->neoForge->setChecked(loaders & ModPlatform::NeoForge);
         ui->forge->setChecked(loaders & ModPlatform::Forge);
         ui->fabric->setChecked(loaders & ModPlatform::Fabric);
         ui->quilt->setChecked(loaders & ModPlatform::Quilt);
         ui->liteLoader->setChecked(loaders & ModPlatform::LiteLoader);
+        ui->babric->setChecked(loaders & ModPlatform::Babric);
+        ui->btaBabric->setChecked(loaders & ModPlatform::BTA);
+        ui->legacyFabric->setChecked(loaders & ModPlatform::LegacyFabric);
+        ui->ornithe->setChecked(loaders & ModPlatform::Ornithe);
+        ui->rift->setChecked(loaders & ModPlatform::Rift);
         m_filter->loaders = loaders;
         auto def = m_instance->getPackProfile()->getComponentVersion("net.minecraft");
-        m_filter->versions.emplace_front(def);
+        m_filter->versions.emplace_back(def);
         ui->versions->setCheckedItems({ def });
         ui->version->setCurrentIndex(ui->version->findText(def));
     } else {
@@ -263,7 +265,7 @@ void ModFilterWidget::onVersionFilterChanged(int)
 {
     auto versions = ui->versions->checkedItems();
     versions.sort();
-    std::list<Version> current_list;
+    std::vector<Version> current_list;
 
     for (const QString& version : versions)
         current_list.emplace_back(version);
@@ -306,16 +308,16 @@ void ModFilterWidget::onLoadersFilterChanged()
 
 void ModFilterWidget::onSideFilterChanged()
 {
-    ModPlatform::Side side;
+    ModPlatform::SideType side;
 
     if (ui->clientSide->isChecked() && !ui->serverSide->isChecked()) {
-        side = ModPlatform::Side::ClientSide;
+        side = ModPlatform::SideType::ClientSide;
     } else if (!ui->clientSide->isChecked() && ui->serverSide->isChecked()) {
-        side = ModPlatform::Side::ServerSide;
+        side = ModPlatform::SideType::ServerSide;
     } else if (ui->clientSide->isChecked() && ui->serverSide->isChecked()) {
-        side = ModPlatform::Side::UniversalSide;
+        side = ModPlatform::SideType::UniversalSide;
     } else {
-        side = ModPlatform::Side::NoSide;
+        side = ModPlatform::SideType::NoSide;
     }
 
     m_filter_changed = side != m_filter->side;
@@ -385,15 +387,15 @@ void ModFilterWidget::onOpenSourceFilterChanged()
 
 void ModFilterWidget::onReleaseFilterChanged()
 {
-    std::list<ModPlatform::IndexedVersionType> releases;
+    std::vector<ModPlatform::IndexedVersionType> releases;
     if (ui->releaseCb->isChecked())
-        releases.push_back(ModPlatform::IndexedVersionType(ModPlatform::IndexedVersionType::VersionType::Release));
+        releases.push_back(ModPlatform::IndexedVersionType::Release);
     if (ui->betaCb->isChecked())
-        releases.push_back(ModPlatform::IndexedVersionType(ModPlatform::IndexedVersionType::VersionType::Beta));
+        releases.push_back(ModPlatform::IndexedVersionType::Beta);
     if (ui->alphaCb->isChecked())
-        releases.push_back(ModPlatform::IndexedVersionType(ModPlatform::IndexedVersionType::VersionType::Alpha));
+        releases.push_back(ModPlatform::IndexedVersionType::Alpha);
     if (ui->unknownCb->isChecked())
-        releases.push_back(ModPlatform::IndexedVersionType(ModPlatform::IndexedVersionType::VersionType::Unknown));
+        releases.push_back(ModPlatform::IndexedVersionType::Unknown);
     m_filter_changed = releases != m_filter->releases;
     m_filter->releases = releases;
     if (m_filter_changed)

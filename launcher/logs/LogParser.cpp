@@ -60,7 +60,7 @@ std::optional<LogParser::LogEntry> LogParser::parseAttributes()
             entry.timestamp = QDateTime::fromSecsSinceEpoch(value.trimmed().toLongLong());
         } else if (name == "level"_L1) {
             entry.levelText = value.trimmed().toString();
-            entry.level = MessageLevel::getLevel(entry.levelText);
+            entry.level = MessageLevel::fromName(entry.levelText);
         } else if (name == "thread"_L1) {
             entry.thread = value.trimmed().toString();
         }
@@ -320,16 +320,15 @@ std::optional<LogParser::ParsedItem> LogParser::parseLog4J()
     throw std::runtime_error("unreachable: already verified this was a complete log4j:Event");
 }
 
-MessageLevel::Enum LogParser::guessLevel(const QString& line)
+MessageLevel LogParser::guessLevel(const QString& line, MessageLevel previous)
 {
-    static const QRegularExpression LINE_WITH_LEVEL("^\\[(?<timestamp>[0-9:]+)\\] \\[[^/]+/(?<level>[^\\]]+)\\]");
+    static const QRegularExpression LINE_WITH_LEVEL("^\\[[^\\]]+\\] \\[[^/]+/(?<level>[^\\]]+)\\]");
     auto match = LINE_WITH_LEVEL.match(line);
     if (match.hasMatch()) {
         // New style logs from log4j
-        QString timestamp = match.captured("timestamp");
         QString levelStr = match.captured("level");
 
-        return MessageLevel::getLevel(levelStr);
+        return MessageLevel::fromName(levelStr);
     } else {
         // Old style forge logs
         if (line.contains("[INFO]") || line.contains("[CONFIG]") || line.contains("[FINE]") || line.contains("[FINER]") ||
@@ -343,11 +342,17 @@ MessageLevel::Enum LogParser::guessLevel(const QString& line)
             return MessageLevel::Debug;
     }
 
+    if (line.contains("Exception: ") || line.contains("Throwable: "))
+        return MessageLevel::Error;
+
+    if (line.startsWith("Caused by: ") || line.startsWith("Exception in thread"))
+        return MessageLevel::Error;
+
     if (line.contains("overwriting existing"))
         return MessageLevel::Fatal;
 
-    if (line == "---- Minecraft Crash Report ----")
-        return MessageLevel::Error;
+    if (line.startsWith("\t") || line.startsWith(" "))
+        return previous;
 
     return MessageLevel::Unknown;
 }

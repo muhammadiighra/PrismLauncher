@@ -1,6 +1,5 @@
 #pragma once
 
-#include "BaseInstance.h"
 #include "ResourceDownloadTask.h"
 #include "ReviewMessageBox.h"
 
@@ -8,6 +7,7 @@
 
 #include "modplatform/CheckUpdateTask.h"
 
+class Minecraft;
 class Mod;
 class ModrinthCheckUpdate;
 class FlameCheckUpdate;
@@ -17,8 +17,8 @@ class ResourceUpdateDialog final : public ReviewMessageBox {
     Q_OBJECT
    public:
     explicit ResourceUpdateDialog(QWidget* parent,
-                                  BaseInstance* instance,
-                                  std::shared_ptr<ResourceFolderModel> resourceModel,
+                                  MinecraftInstance* instance,
+                                  ResourceFolderModel* resourceModel,
                                   QList<Resource*>& searchFor,
                                   bool includeDeps,
                                   QList<ModPlatform::ModLoaderType> loadersList = {});
@@ -39,7 +39,7 @@ class ResourceUpdateDialog final : public ReviewMessageBox {
    private slots:
     void onMetadataEnsured(Resource* resource);
     void onMetadataFailed(Resource* resource,
-                          bool try_others = false,
+                          bool tryOthers = false,
                           ModPlatform::ResourceProvider firstChoice = ModPlatform::ResourceProvider::MODRINTH);
 
    private:
@@ -48,7 +48,7 @@ class ResourceUpdateDialog final : public ReviewMessageBox {
     shared_qobject_ptr<ModrinthCheckUpdate> m_modrinthCheckTask;
     shared_qobject_ptr<FlameCheckUpdate> m_flameCheckTask;
 
-    const std::shared_ptr<ResourceFolderModel> m_resourceModel;
+    ResourceFolderModel* m_resourceModel;
 
     QList<Resource*>& m_candidates;
     QList<Resource*> m_modrinthToUpdate;
@@ -59,7 +59,7 @@ class ResourceUpdateDialog final : public ReviewMessageBox {
     QList<std::tuple<Resource*, QString, QUrl>> m_failedCheckUpdate;
 
     QHash<QString, ResourceDownloadTask::Ptr> m_tasks;
-    BaseInstance* m_instance;
+    MinecraftInstance* m_instance;
 
     bool m_noUpdates = false;
     bool m_aborted = false;

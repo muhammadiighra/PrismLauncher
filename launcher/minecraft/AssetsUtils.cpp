@@ -46,12 +46,12 @@
 #include "AssetsUtils.h"
 #include "BuildConfig.h"
 #include "FileSystem.h"
-#include "net/ApiDownload.h"
+#include "net/ApiRequest.h"
 #include "net/ChecksumValidator.h"
-#include "net/Download.h"
 
 #include "Application.h"
 #include "net/NetRequest.h"
+#include "update/AssetUpdateTask.h"
 
 namespace {
 QSet<QString> collectPathsFromDir(QString dirPath)
@@ -103,7 +103,7 @@ bool loadAssetsIndexJson(const QString& assetsId, const QString& path, AssetsInd
     // Try to open the file and fail if we can't.
     // TODO: We should probably report this error to the user.
     if (!file.open(QIODevice::ReadOnly)) {
-        qCritical() << "Failed to read assets index file" << path;
+        qCritical() << "Failed to read assets index file" << path << "error:" << file.errorString();
         return false;
     }
     index.id = assetsId;
@@ -281,7 +281,7 @@ Net::NetRequest::Ptr AssetObject::getDownloadAction()
 {
     QFileInfo objectFile(getLocalPath());
     if ((!objectFile.isFile()) || (objectFile.size() != size)) {
-        auto objectDL = Net::ApiDownload::makeFile(getUrl(), objectFile.filePath());
+        auto objectDL = Net::ApiRequest::makeFile(getUrl(), objectFile.filePath());
         if (hash.size()) {
             objectDL->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, hash));
         }
@@ -298,7 +298,7 @@ QString AssetObject::getLocalPath()
 
 QUrl AssetObject::getUrl()
 {
-    auto resourceURL = APPLICATION->settings()->get("ResourceURL").toString();
+    auto resourceURL = AssetUpdateTask::resourceUrl();
     return resourceURL + getRelPath();
 }
 

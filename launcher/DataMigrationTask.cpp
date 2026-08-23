@@ -45,7 +45,7 @@ void DataMigrationTask::dryRunFinished()
     // 2. Copy
     // Actually copy all files now.
     m_toCopy = m_copy.totalCopied();
-    connect(&m_copy, &FS::copy::fileCopied, [&, this](const QString& relativeName) {
+    connect(&m_copy, &FS::copy::fileCopied, this, [this](const QString& relativeName) {
         QString shortenedName = relativeName;
         // shorten the filename to hopefully fit into one line
         if (shortenedName.length() > 50)
@@ -63,7 +63,7 @@ void DataMigrationTask::dryRunFinished()
 
 void DataMigrationTask::dryRunAborted()
 {
-    emitFailed(tr("Aborted"));
+    emitAborted();
 }
 
 void DataMigrationTask::copyFinished()
@@ -81,5 +81,5 @@ void DataMigrationTask::copyFinished()
 
 void DataMigrationTask::copyAborted()
 {
-    emitFailed(tr("Aborted"));
+    emitAborted();
 }

@@ -43,16 +43,16 @@
 #include "tasks/ConcurrentTask.h"
 
 // Those are included so that they are also included by anyone using NetJob
-#include "net/Download.h"
 #include "net/HttpMetaCache.h"
 
 class NetJob : public ConcurrentTask {
     Q_OBJECT
 
    public:
+    // TODO: delete
     using Ptr = shared_qobject_ptr<NetJob>;
 
-    explicit NetJob(QString job_name, shared_qobject_ptr<QNetworkAccessManager> network, int max_concurrent = -1);
+    explicit NetJob(QString job_name, QNetworkAccessManager* network, int max_concurrent = -1);
     ~NetJob() override = default;
 
     auto size() const -> int;
@@ -77,7 +77,7 @@ class NetJob : public ConcurrentTask {
     bool isOnline();
 
    private:
-    shared_qobject_ptr<QNetworkAccessManager> m_network;
+    QNetworkAccessManager* m_network;
 
     int m_try = 1;
     bool m_ask_retry = true;

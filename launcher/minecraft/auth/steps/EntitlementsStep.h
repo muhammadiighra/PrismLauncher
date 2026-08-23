@@ -1,9 +1,8 @@
 #pragma once
 #include <QObject>
-#include <memory>
 
 #include "minecraft/auth/AuthStep.h"
-#include "net/Download.h"
+#include "net/NetRequest.h"
 #include "net/NetJob.h"
 
 class EntitlementsStep : public AuthStep {
@@ -18,11 +17,10 @@ class EntitlementsStep : public AuthStep {
     QString describe() override;
 
    private slots:
-    void onRequestDone();
+    void onRequestDone(QByteArray* response);
 
    private:
     QString m_entitlements_request_id;
-    std::shared_ptr<QByteArray> m_response;
-    Net::Download::Ptr m_request;
+    Net::NetRequest::Ptr m_request;
     NetJob::Ptr m_task;
 };

@@ -48,6 +48,8 @@ class World {
     bool replace(World& with);
     // change the world's filesystem path (used by world lists for *MAGIC* purposes)
     void repath(const QFileInfo& file);
+    void loadMetadata();
+    bool isMetadataLoaded() const { return m_metadataLoaded; }
     // remove the icon file, if any
     bool resetIcon();
 
@@ -78,6 +80,7 @@ class World {
     void readFromZip(const QFileInfo& file);
     void readFromFS(const QFileInfo& file);
     void loadFromLevelDat(QByteArray data);
+    bool m_metadataLoaded = false;
 
    protected:
     QFileInfo m_containerFile;
@@ -87,7 +90,7 @@ class World {
     QString m_iconFile;
     QDateTime m_levelDatTime;
     QDateTime m_lastPlayed;
-    int64_t m_size;
+    int64_t m_size = 0;
     int64_t m_randomSeed = 0;
     GameType m_gameType;
     bool m_isValid = false;

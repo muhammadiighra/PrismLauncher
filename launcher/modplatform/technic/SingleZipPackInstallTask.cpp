@@ -23,7 +23,7 @@
 
 #include "Application.h"
 
-#include "net/ApiDownload.h"
+#include "net/ApiRequest.h"
 
 Technic::SingleZipPackInstallTask::SingleZipPackInstallTask(const QUrl& sourceUrl, const QString& minecraftVersion)
 {
@@ -47,7 +47,7 @@ void Technic::SingleZipPackInstallTask::executeTask()
     auto entry = APPLICATION->metacache()->resolveEntry("general", path);
     entry->setStale(true);
     m_filesNetJob.reset(new NetJob(tr("Modpack download"), APPLICATION->network()));
-    m_filesNetJob->addNetAction(Net::ApiDownload::makeCached(m_sourceUrl, entry));
+    m_filesNetJob->addNetAction(Net::ApiRequest::makeCached(m_sourceUrl, entry));
     m_archivePath = entry->getFullPath();
     auto job = m_filesNetJob.get();
     connect(job, &NetJob::succeeded, this, &Technic::SingleZipPackInstallTask::downloadSucceeded);
@@ -66,11 +66,7 @@ void Technic::SingleZipPackInstallTask::downloadSucceeded()
     qDebug() << "Attempting to create instance from" << m_archivePath;
 
     // open the zip and find relevant files in it
-    m_packZip.reset(new QuaZip(m_archivePath));
-    if (!m_packZip->open(QuaZip::mdUnzip)) {
-        emitFailed(tr("Unable to open supplied modpack zip file."));
-        return;
-    }
+    m_packZip.reset(new MMCZip::ArchiveReader(m_archivePath));
     m_extractFuture =
         QtConcurrent::run(QThreadPool::globalInstance(), MMCZip::extractSubDir, m_packZip.get(), QString(""), extractDir.absolutePath());
     connect(&m_extractFutureWatcher, &QFutureWatcher<QStringList>::finished, this, &Technic::SingleZipPackInstallTask::extractFinished);
@@ -82,8 +78,8 @@ void Technic::SingleZipPackInstallTask::downloadSucceeded()
 void Technic::SingleZipPackInstallTask::downloadFailed(QString reason)
 {
     m_abortable = false;
-    emitFailed(reason);
     m_filesNetJob.reset();
+    emitFailed(reason);
 }
 
 void Technic::SingleZipPackInstallTask::downloadProgressChanged(qint64 current, qint64 total)

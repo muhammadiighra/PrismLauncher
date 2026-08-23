@@ -11,11 +11,10 @@
 #include "Application.h"
 #include "Json.h"
 #include "modplatform/ModIndex.h"
-#include "net/ApiDownload.h"
-#include "net/ApiUpload.h"
+#include "net/ApiRequest.h"
 #include "net/NetJob.h"
 
-Task::Ptr FlameAPI::matchFingerprints(const QList<uint>& fingerprints, std::shared_ptr<QByteArray> response)
+std::pair<Task::Ptr, QByteArray*> FlameAPI::matchFingerprints(const QList<uint>& fingerprints) const
 {
     auto netJob = makeShared<NetJob>(QString("Flame::MatchFingerprints"), APPLICATION->network());
 
@@ -29,30 +28,29 @@ Task::Ptr FlameAPI::matchFingerprints(const QList<uint>& fingerprints, std::shar
 
     QJsonDocument body(body_obj);
     auto body_raw = body.toJson();
+    auto [action, response] = Net::ApiRequest::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/fingerprints"), body_raw);
+    netJob->addNetAction(action);
 
-    netJob->addNetAction(Net::ApiUpload::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/fingerprints"), response, body_raw));
-
-    return netJob;
+    return { netJob, response };
 }
 
-QString FlameAPI::getModFileChangelog(int modId, int fileId)
+QString FlameAPI::getModFileChangelog(int modId, int fileId) const
 {
     QEventLoop lock;
     QString changelog;
 
     auto netJob = makeShared<NetJob>(QString("Flame::FileChangelog"), APPLICATION->network());
-    auto response = std::make_shared<QByteArray>();
-    netJob->addNetAction(Net::ApiDownload::makeByteArray(
+    auto [action, response] = Net::ApiRequest::makeByteArray(
         QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/files/%2/changelog")
-            .arg(QString::fromStdString(std::to_string(modId)), QString::fromStdString(std::to_string(fileId))),
-        response));
+            .arg(QString::fromStdString(std::to_string(modId)), QString::fromStdString(std::to_string(fileId))));
+    netJob->addNetAction(action);
 
-    QObject::connect(netJob.get(), &NetJob::succeeded, [&netJob, response, &changelog] {
+    QObject::connect(netJob.get(), &NetJob::succeeded, netJob.get(), [&netJob, response, &changelog] {
         QJsonParseError parse_error{};
         QJsonDocument doc = QJsonDocument::fromJson(*response, &parse_error);
         if (parse_error.error != QJsonParseError::NoError) {
-            qWarning() << "Error while parsing JSON response from Flame::FileChangelog at " << parse_error.offset
-                       << " reason: " << parse_error.errorString();
+            qWarning() << "Error while parsing JSON response from Flame::FileChangelog at" << parse_error.offset
+                       << "reason:" << parse_error.errorString();
             qWarning() << *response;
 
             netJob->failed(parse_error.errorString());
@@ -62,7 +60,7 @@ QString FlameAPI::getModFileChangelog(int modId, int fileId)
         changelog = doc.object()["data"].toString();
     });
 
-    QObject::connect(netJob.get(), &NetJob::finished, [&lock] { lock.quit(); });
+    QObject::connect(netJob.get(), &NetJob::finished, &lock, &QEventLoop::quit);
 
     netJob->start();
     lock.exec();
@@ -70,22 +68,22 @@ QString FlameAPI::getModFileChangelog(int modId, int fileId)
     return changelog;
 }
 
-QString FlameAPI::getModDescription(int modId)
+QString FlameAPI::getModDescription(int modId) const
 {
     QEventLoop lock;
     QString description;
 
     auto netJob = makeShared<NetJob>(QString("Flame::ModDescription"), APPLICATION->network());
-    auto response = std::make_shared<QByteArray>();
-    netJob->addNetAction(Net::ApiDownload::makeByteArray(
-        QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/description").arg(QString::number(modId)), response));
+    auto [action, response] =
+        Net::ApiRequest::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/description").arg(QString::number(modId)));
+    netJob->addNetAction(action);
 
-    QObject::connect(netJob.get(), &NetJob::succeeded, [&netJob, response, &description] {
+    QObject::connect(netJob.get(), &NetJob::succeeded, netJob.get(), [&netJob, response, &description] {
         QJsonParseError parse_error{};
         QJsonDocument doc = QJsonDocument::fromJson(*response, &parse_error);
         if (parse_error.error != QJsonParseError::NoError) {
-            qWarning() << "Error while parsing JSON response from Flame::ModDescription at " << parse_error.offset
-                       << " reason: " << parse_error.errorString();
+            qWarning() << "Error while parsing JSON response from Flame::ModDescription at" << parse_error.offset
+                       << "reason:" << parse_error.errorString();
             qWarning() << *response;
 
             netJob->failed(parse_error.errorString());
@@ -95,7 +93,7 @@ QString FlameAPI::getModDescription(int modId)
         description = doc.object()["data"].toString();
     });
 
-    QObject::connect(netJob.get(), &NetJob::finished, [&lock] { lock.quit(); });
+    QObject::connect(netJob.get(), &NetJob::finished, &lock, &QEventLoop::quit);
 
     netJob->start();
     lock.exec();
@@ -103,7 +101,7 @@ QString FlameAPI::getModDescription(int modId)
     return description;
 }
 
-Task::Ptr FlameAPI::getProjects(QStringList addonIds, std::shared_ptr<QByteArray> response) const
+std::pair<Task::Ptr, QByteArray*> FlameAPI::getProjects(QStringList addonIds) const
 {
     auto netJob = makeShared<NetJob>(QString("Flame::GetProjects"), APPLICATION->network());
 
@@ -117,15 +115,15 @@ Task::Ptr FlameAPI::getProjects(QStringList addonIds, std::shared_ptr<QByteArray
 
     QJsonDocument body(body_obj);
     auto body_raw = body.toJson();
+    auto [action, response] = Net::ApiRequest::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/mods"), body_raw);
+    netJob->addNetAction(action);
 
-    netJob->addNetAction(Net::ApiUpload::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/mods"), response, body_raw));
+    QObject::connect(netJob.get(), &NetJob::failed, netJob.get(), [body_raw] { qDebug() << body_raw; });
 
-    QObject::connect(netJob.get(), &NetJob::failed, [body_raw] { qDebug() << body_raw; });
-
-    return netJob;
+    return { netJob, response };
 }
 
-Task::Ptr FlameAPI::getFiles(const QStringList& fileIds, std::shared_ptr<QByteArray> response) const
+std::pair<Task::Ptr, QByteArray*> FlameAPI::getFiles(const QStringList& fileIds) const
 {
     auto netJob = makeShared<NetJob>(QString("Flame::GetFiles"), APPLICATION->network());
 
@@ -140,22 +138,25 @@ Task::Ptr FlameAPI::getFiles(const QStringList& fileIds, std::shared_ptr<QByteAr
     QJsonDocument body(body_obj);
     auto body_raw = body.toJson();
 
-    netJob->addNetAction(Net::ApiUpload::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/mods/files"), response, body_raw));
+    auto [action, response] = Net::ApiRequest::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/mods/files"), body_raw);
+    netJob->addNetAction(action);
 
-    QObject::connect(netJob.get(), &NetJob::failed, [body_raw] { qDebug() << body_raw; });
+    QObject::connect(netJob.get(), &NetJob::failed, netJob.get(), [body_raw] { qDebug() << body_raw; });
 
-    return netJob;
+    return { netJob, response };
 }
 
-Task::Ptr FlameAPI::getFile(const QString& addonId, const QString& fileId, std::shared_ptr<QByteArray> response) const
+std::pair<Task::Ptr, QByteArray*> FlameAPI::getFile(const QString& addonId, const QString& fileId) const
 {
     auto netJob = makeShared<NetJob>(QString("Flame::GetFile"), APPLICATION->network());
-    netJob->addNetAction(
-        Net::ApiDownload::makeByteArray(QUrl(QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/files/%2").arg(addonId, fileId)), response));
+    auto [action, response] =
+        Net::ApiRequest::makeByteArray(QUrl(QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/files/%2").arg(addonId, fileId)));
+    netJob->addNetAction(action);
 
-    QObject::connect(netJob.get(), &NetJob::failed, [addonId, fileId] { qDebug() << "Flame API file failure" << addonId << fileId; });
+    QObject::connect(netJob.get(), &NetJob::failed, netJob.get(),
+                     [addonId, fileId] { qDebug() << "Flame API file failure" << addonId << fileId; });
 
-    return netJob;
+    return { netJob, response };
 }
 
 QList<ResourceAPI::SortingMethod> FlameAPI::getSortingMethods() const
@@ -171,28 +172,29 @@ QList<ResourceAPI::SortingMethod> FlameAPI::getSortingMethods() const
              { 8, "GameVersion", QObject::tr("Sort by Game Version") } };
 }
 
-Task::Ptr FlameAPI::getCategories(std::shared_ptr<QByteArray> response, ModPlatform::ResourceType type)
+std::pair<Task::Ptr, QByteArray*> FlameAPI::getCategories(ModPlatform::ResourceType type)
 {
     auto netJob = makeShared<NetJob>(QString("Flame::GetCategories"), APPLICATION->network());
-    netJob->addNetAction(Net::ApiDownload::makeByteArray(
-        QUrl(QString(BuildConfig.FLAME_BASE_URL + "/categories?gameId=432&classId=%1").arg(getClassId(type))), response));
-    QObject::connect(netJob.get(), &Task::failed, [](QString msg) { qDebug() << "Flame failed to get categories:" << msg; });
-    return netJob;
+    auto [action, response] = Net::ApiRequest::makeByteArray(
+        QUrl(QString(BuildConfig.FLAME_BASE_URL + "/categories?gameId=432&classId=%1").arg(getClassId(type))));
+    netJob->addNetAction(action);
+    QObject::connect(netJob.get(), &Task::failed, netJob.get(), [](QString msg) { qDebug() << "Flame failed to get categories:" << msg; });
+    return { netJob, response };
 }
 
-Task::Ptr FlameAPI::getModCategories(std::shared_ptr<QByteArray> response)
+std::pair<Task::Ptr, QByteArray*> FlameAPI::getModCategories() const
 {
-    return getCategories(response, ModPlatform::ResourceType::Mod);
+    return getCategories(ModPlatform::ResourceType::Mod);
 }
 
-QList<ModPlatform::Category> FlameAPI::loadModCategories(std::shared_ptr<QByteArray> response)
+QList<ModPlatform::Category> FlameAPI::loadModCategories(const QByteArray& response) const
 {
     QList<ModPlatform::Category> categories;
     QJsonParseError parse_error{};
-    QJsonDocument doc = QJsonDocument::fromJson(*response, &parse_error);
+    QJsonDocument doc = QJsonDocument::fromJson(response, &parse_error);
     if (parse_error.error != QJsonParseError::NoError) {
-        qWarning() << "Error while parsing JSON response from categories at " << parse_error.offset
-                   << " reason: " << parse_error.errorString();
+        qWarning() << "Error while parsing JSON response from categories at" << parse_error.offset
+                   << "reason:" << parse_error.errorString();
         qWarning() << *response;
         return categories;
     }
@@ -219,7 +221,7 @@ QList<ModPlatform::Category> FlameAPI::loadModCategories(std::shared_ptr<QByteAr
 std::optional<ModPlatform::IndexedVersion> FlameAPI::getLatestVersion(QList<ModPlatform::IndexedVersion> versions,
                                                                       QList<ModPlatform::ModLoaderType> instanceLoaders,
                                                                       ModPlatform::ModLoaderTypes modLoaders,
-                                                                      bool checkLoaders)
+                                                                      bool checkLoaders) const
 {
     static const auto noLoader = ModPlatform::ModLoaderType(0);
     if (!checkLoaders) {

@@ -42,19 +42,21 @@
 #include "Application.h"
 #include "BuildConfig.h"
 #include "FileSystem.h"
+#include "HardwareInfo.h"
 #include "JavaCommon.h"
+#include "SysInfo.h"
 #include "java/JavaInstallList.h"
 #include "java/JavaUtils.h"
+#include "minecraft/MinecraftInstance.h"
 #include "settings/Setting.h"
-#include "sys.h"
 #include "ui/dialogs/CustomMessageBox.h"
 #include "ui/dialogs/VersionSelectDialog.h"
 #include "ui/java/InstallJavaDialog.h"
 
 #include "ui_JavaSettingsWidget.h"
 
-JavaSettingsWidget::JavaSettingsWidget(InstancePtr instance, QWidget* parent)
-    : QWidget(parent), m_instance(std::move(instance)), m_ui(new Ui::JavaSettingsWidget)
+JavaSettingsWidget::JavaSettingsWidget(MinecraftInstance* instance, QWidget* parent)
+    : QWidget(parent), m_instance(instance), m_ui(new Ui::JavaSettingsWidget)
 {
     m_ui->setupUi(this);
 
@@ -79,7 +81,7 @@ JavaSettingsWidget::JavaSettingsWidget(InstancePtr instance, QWidget* parent)
         m_ui->memoryGroupBox->setCheckable(true);
         m_ui->javaArgumentsGroupBox->setCheckable(true);
 
-        SettingsObjectPtr settings = m_instance->settings();
+        SettingsObject* settings = m_instance->settings();
 
         connect(settings->getSetting("OverrideJavaLocation").get(), &Setting::SettingChanged, m_ui->javaInstallationGroupBox,
                 [this, settings] { m_ui->javaInstallationGroupBox->setChecked(settings->get("OverrideJavaLocation").toBool()); });
@@ -87,10 +89,10 @@ JavaSettingsWidget::JavaSettingsWidget(InstancePtr instance, QWidget* parent)
                 [this, settings] { m_ui->javaPathTextBox->setText(settings->get("JavaPath").toString()); });
 
         connect(m_ui->javaDownloadBtn, &QPushButton::clicked, this, [this] {
-            auto javaDialog = new Java::InstallDialog({}, m_instance.get(), this);
+            auto javaDialog = new Java::InstallDialog({}, m_instance, this);
             javaDialog->exec();
         });
-        connect(m_ui->javaPathTextBox, &QLineEdit::textChanged, [this](QString newValue) {
+        connect(m_ui->javaPathTextBox, &QLineEdit::textChanged, this, [this](QString newValue) {
             if (m_instance->settings()->get("JavaPath").toString() != newValue) {
                 m_instance->settings()->set("AutomaticJava", false);
             }
@@ -115,7 +117,7 @@ JavaSettingsWidget::~JavaSettingsWidget()
 
 void JavaSettingsWidget::loadSettings()
 {
-    SettingsObjectPtr settings;
+    SettingsObject* settings;
 
     if (m_instance != nullptr)
         settings = m_instance->settings();
@@ -150,6 +152,7 @@ void JavaSettingsWidget::loadSettings()
         m_ui->maxMemSpinBox->setValue(min);
     }
     m_ui->permGenSpinBox->setValue(settings->get("PermGen").toInt());
+    m_ui->lowMemWarningCheckBox->setChecked(settings->get("LowMemWarning").toBool());
 
     // Java arguments
     m_ui->javaArgumentsGroupBox->setChecked(m_instance == nullptr || settings->get("OverrideJavaArgs").toBool());
@@ -158,14 +161,12 @@ void JavaSettingsWidget::loadSettings()
 
 void JavaSettingsWidget::saveSettings()
 {
-    SettingsObjectPtr settings;
+    SettingsObject* settings;
 
     if (m_instance != nullptr)
         settings = m_instance->settings();
     else
         settings = APPLICATION->settings();
-
-    SettingsObject::Lock lock(settings);
 
     // Java Install Settings
     bool javaInstall = m_instance == nullptr || m_ui->javaInstallationGroupBox->isChecked();
@@ -204,10 +205,12 @@ void JavaSettingsWidget::saveSettings()
             settings->set("MaxMemAlloc", min);
         }
         settings->set("PermGen", m_ui->permGenSpinBox->value());
+        settings->set("LowMemWarning", m_ui->lowMemWarningCheckBox->isChecked());
     } else {
         settings->reset("MinMemAlloc");
         settings->reset("MaxMemAlloc");
         settings->reset("PermGen");
+        settings->reset("LowMemWarning");
     }
 
     // Java arguments
@@ -265,7 +268,7 @@ void JavaSettingsWidget::onJavaAutodetect()
         return;
     }
 
-    VersionSelectDialog versionDialog(APPLICATION->javalist().get(), tr("Select a Java version"), this, true);
+    VersionSelectDialog versionDialog(APPLICATION->javalist(), tr("Select a Java version"), this, true);
     versionDialog.setResizeOn(2);
     versionDialog.exec();
 
@@ -285,7 +288,7 @@ void JavaSettingsWidget::onJavaAutodetect()
 }
 void JavaSettingsWidget::updateThresholds()
 {
-    auto sysMiB = Sys::getSystemRam() / Sys::mebibyte;
+    auto sysMiB = HardwareInfo::totalRamMiB();
     unsigned int maxMem = m_ui->maxMemSpinBox->value();
     unsigned int minMem = m_ui->minMemSpinBox->value();
 

@@ -39,12 +39,15 @@
 
 #pragma once
 
-#include <qloggingcategory.h>
 #include <QNetworkReply>
+#include <QTimer>
 #include <QUrl>
 #include <chrono>
+#include <cstdint>
+#include <utility>
 
 #include "HeaderProxy.h"
+#include "HttpMetaCache.h"
 #include "Sink.h"
 #include "Validator.h"
 
@@ -53,15 +56,39 @@
 #include "tasks/Task.h"
 
 namespace Net {
+class ByteArraySink;
+
 class NetRequest : public Task {
     Q_OBJECT
-   protected:
-    explicit NetRequest() : Task() {}
-
    public:
     using Ptr = shared_qobject_ptr<class NetRequest>;
-    enum class Option { NoOptions = 0, AcceptLocalFiles = 1, MakeEternal = 2 };
+    enum class Option : std::uint8_t {
+        NoOptions = 0,
+        AcceptLocalFiles = 1,
+        MakeEternal = 2,
+        AutoRetry = 4,
+        AddAPIHeaders = 8,
+    };
     Q_DECLARE_FLAGS(Options, Option)
+
+   public:
+    explicit NetRequest();
+    explicit NetRequest(const QUrl& url, Options options = Option::NoOptions, const QString& name = QString());
+    NetRequest(const QUrl& url, QByteArray postData, Options options);
+
+   public:
+#if defined(LAUNCHER_APPLICATION)
+    static auto makeCached(const QUrl& url, MetaEntryPtr entry, Options options = Option::NoOptions) -> NetRequest::Ptr;
+#endif
+
+    /**
+     * Creates a request downloading to the returned QByteArray,.
+     * The QByteArray will live as long as the Download object.
+     */
+    static auto makeByteArray(const QUrl& url, Options options = Option::NoOptions) -> std::pair<NetRequest::Ptr, QByteArray*>;
+    static auto makeByteArray(const QUrl& url, QByteArray postData, Options options = Option::NoOptions)
+        -> std::pair<NetRequest::Ptr, QByteArray*>;
+    static auto makeFile(const QUrl& url, const QString& path, Options options = Option::NoOptions) -> NetRequest::Ptr;
 
    public:
     ~NetRequest() override = default;
@@ -69,18 +96,22 @@ class NetRequest : public Task {
     auto abort() -> bool override;
     auto canAbort() const -> bool override { return true; }
 
-    void setNetwork(shared_qobject_ptr<QNetworkAccessManager> network) { m_network = network; }
-    void addHeaderProxy(Net::HeaderProxy* proxy) { m_headerProxies.push_back(std::shared_ptr<Net::HeaderProxy>(proxy)); }
+    void setNetwork(QNetworkAccessManager* network) { m_network = network; }
+    void addHeaderProxy(std::unique_ptr<Net::HeaderProxy> proxy) { m_headerProxies.push_back(std::move(proxy)); }
+
+    // automatically handle HTTP 429 Too Many Requests errors and retry
+    void enableAutoRetry(bool enable);
 
     QUrl url() const;
-    void setUrl(QUrl url) { m_url = url; }
+    void setUrl(QUrl url) { m_url = std::move(url); }
     int replyStatusCode() const;
     QNetworkReply::NetworkError error() const;
     QString errorString() const;
 
    private:
     auto handleRedirect() -> bool;
-    virtual QNetworkReply* getReply(QNetworkRequest&) = 0;
+    void handleAutoRetry(int64_t delay);
+    virtual QNetworkReply* getReply(QNetworkRequest&);
 
    protected slots:
     void onProgress(qint64 bytesReceived, qint64 bytesTotal);
@@ -94,21 +125,26 @@ class NetRequest : public Task {
     std::unique_ptr<Sink> m_sink;
     Options m_options;
 
-    using logCatFunc = const QLoggingCategory& (*)();
-    logCatFunc logCat = taskUploadLogC;
+    using LogCatFunc = const QLoggingCategory& (*)();
+    LogCatFunc m_logCat = taskUploadLogC;
 
-    std::chrono::steady_clock m_clock;
-    std::chrono::time_point<std::chrono::steady_clock> m_last_progress_time;
-    qint64 m_last_progress_bytes;
+    std::chrono::time_point<std::chrono::steady_clock> m_lastProgressTime;
+    qint64 m_lastProgressBytes = 0;
 
-    shared_qobject_ptr<QNetworkAccessManager> m_network;
+    QNetworkAccessManager* m_network = nullptr;
 
     /// the network reply
-    unique_qobject_ptr<QNetworkReply> m_reply;
+    std::unique_ptr<QNetworkReply> m_reply;
+    QByteArray m_errorResponse;
 
     /// source URL
     QUrl m_url;
-    std::vector<std::shared_ptr<Net::HeaderProxy>> m_headerProxies;
+    std::vector<std::unique_ptr<Net::HeaderProxy>> m_headerProxies;
+
+    int m_retryCount = 0;
+    QTimer m_retryTimer;
+
+    std::optional<QByteArray> m_postData;
 };
 }  // namespace Net
 

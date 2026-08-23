@@ -1,7 +1,5 @@
 {
   "dependencies": [
-    "bzip2",
-    "cmark",
     {
       "name": "ecm",
       "host": true
@@ -12,7 +10,21 @@
     },
     {
       "name": "pkgconf",
-      "host": true
+      "host": true,
+      "platform": "windows & !mingw"
+    },
+
+    "cmark",
+    {
+      "name": "libarchive",
+      "default-features": false,
+      "features": [
+        "bzip2",
+        "lz4",
+        "lzma",
+        "lzo",
+        "zstd"
+      ]
     },
     "tomlplusplus",
     "zlib"

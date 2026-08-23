@@ -18,6 +18,28 @@ ReviewMessageBox::ReviewMessageBox(QWidget* parent, [[maybe_unused]] QString con
     ui->modTreeWidget->header()->setStretchLastSection(false);
     ui->modTreeWidget->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 
+    auto* resourcesItem = ui->modTreeWidget->topLevelItem(0);
+    resourcesItem->setExpanded(true);
+    connect(ui->modTreeWidget, &QTreeWidget::itemCollapsed, this, [resourcesItem](QTreeWidgetItem* item) {
+        if (item != resourcesItem) {
+            return;
+        }
+
+        bool expandChildren = true;
+        for (int i = 0; i < resourcesItem->childCount(); ++i) {
+            if (resourcesItem->child(i)->isExpanded()) {
+                expandChildren = false;
+                break;
+            }
+        }
+
+        // Keep the resource rows visible and apply the root's toggle to their details instead.
+        resourcesItem->setExpanded(true);
+        for (int i = 0; i < resourcesItem->childCount(); ++i) {
+            resourcesItem->child(i)->setExpanded(expandChildren);
+        }
+    });
+
     connect(ui->buttonBox, &QDialogButtonBox::accepted, this, &ReviewMessageBox::accept);
     connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &ReviewMessageBox::reject);
 
@@ -26,7 +48,7 @@ ReviewMessageBox::ReviewMessageBox(QWidget* parent, [[maybe_unused]] QString con
 
     // Overwrite Ctrl+C functionality to exclude the label when copying text from tree
     auto shortcut = new QShortcut(QKeySequence::Copy, ui->modTreeWidget);
-    connect(shortcut, &QShortcut::activated, [this]() {
+    connect(shortcut, &QShortcut::activated, this, [this]() {
         auto currentItem = this->ui->modTreeWidget->currentItem();
         if (!currentItem)
             return;
@@ -57,7 +79,7 @@ auto ReviewMessageBox::create(QWidget* parent, QString&& title, QString&& icon) 
 
 void ReviewMessageBox::appendResource(ResourceInformation&& info)
 {
-    auto itemTop = new QTreeWidgetItem(ui->modTreeWidget);
+    auto itemTop = new QTreeWidgetItem(ui->modTreeWidget->topLevelItem(0));
     itemTop->setCheckState(0, info.enabled ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
     itemTop->setText(0, info.name);
     if (!info.enabled) {
@@ -67,17 +89,6 @@ void ReviewMessageBox::appendResource(ResourceInformation&& info)
     auto filenameItem = new QTreeWidgetItem(itemTop);
     filenameItem->setText(0, tr("Filename: %1").arg(info.filename));
     filenameItem->setData(0, Qt::UserRole, info.filename);
-
-    if (!info.custom_file_path.isEmpty()) {
-        auto customPathItem = new QTreeWidgetItem(itemTop);
-        customPathItem->setText(0, tr("This download will be placed in: %1").arg(info.custom_file_path));
-        customPathItem->setData(0, Qt::UserRole, info.custom_file_path);
-
-        itemTop->setIcon(1, QIcon(QIcon::fromTheme("status-yellow")));
-        itemTop->setToolTip(
-            1,
-            tr("This file will be downloaded to a folder location different from the default, possibly due to its loader requiring it."));
-    }
 
     auto providerItem = new QTreeWidgetItem(itemTop);
     providerItem->setText(0, tr("Provider: %1").arg(info.provider));
@@ -104,21 +115,21 @@ void ReviewMessageBox::appendResource(ResourceInformation&& info)
     versionTypeItem->setText(0, tr("Version Type: %1").arg(info.version_type));
     versionTypeItem->setData(0, Qt::UserRole, info.version_type);
 
-    ui->modTreeWidget->addTopLevelItem(itemTop);
+    itemTop->setExpanded(true);
 }
 
 auto ReviewMessageBox::deselectedResources() -> QStringList
 {
     QStringList list;
 
-    auto* item = ui->modTreeWidget->topLevelItem(0);
+    auto* item = ui->modTreeWidget->topLevelItem(0)->child(0);
 
     for (int i = 1; item != nullptr; ++i) {
         if (item->checkState(0) == Qt::CheckState::Unchecked) {
             list.append(item->text(0));
         }
 
-        item = ui->modTreeWidget->topLevelItem(i);
+        item = ui->modTreeWidget->topLevelItem(0)->child(i);
     }
 
     return list;

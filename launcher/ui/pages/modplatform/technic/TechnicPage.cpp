@@ -52,7 +52,7 @@
 #include "Application.h"
 #include "modplatform/technic/SolderPackManifest.h"
 
-#include "net/ApiDownload.h"
+#include "net/ApiRequest.h"
 
 TechnicPage::TechnicPage(NewInstanceDialog* dialog, QWidget* parent)
     : QWidget(parent), ui(new Ui::TechnicPage), dialog(dialog), m_fetch_progress(this, false)
@@ -61,6 +61,8 @@ TechnicPage::TechnicPage(NewInstanceDialog* dialog, QWidget* parent)
     ui->searchEdit->installEventFilter(this);
     model = new Technic::ListModel(this);
     ui->packView->setModel(model);
+    ui->versionSelectionBox->view()->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    ui->versionSelectionBox->view()->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
 
     m_search_timer.setTimerType(Qt::TimerType::CoarseTimer);
     m_search_timer.setSingleShot(true);
@@ -162,9 +164,12 @@ void TechnicPage::suggestCurrent()
 
     auto netJob = makeShared<NetJob>(QString("Technic::PackMeta(%1)").arg(current.name), APPLICATION->network());
     QString slug = current.slug;
-    netJob->addNetAction(Net::ApiDownload::makeByteArray(
-        QString("%1modpack/%2?build=%3").arg(BuildConfig.TECHNIC_API_BASE_URL, slug, BuildConfig.TECHNIC_API_BUILD), response));
-    connect(netJob.get(), &NetJob::succeeded, this, [this, slug] {
+    auto [action, responsePtr] = Net::ApiRequest::makeByteArray(
+        QString("%1modpack/%2?build=%3").arg(BuildConfig.TECHNIC_API_BASE_URL, slug, BuildConfig.TECHNIC_API_BUILD));
+    netJob->addNetAction(action);
+    connect(netJob.get(), &NetJob::succeeded, this, [this, responsePtr, slug] {
+        // NOTE(TheKodeToad): moving the response out to avoid it from being destroyed by jobPtr.reset()
+        QByteArray response = std::move(*responsePtr);
         jobPtr.reset();
 
         if (current.slug != slug) {
@@ -172,12 +177,12 @@ void TechnicPage::suggestCurrent()
         }
 
         QJsonParseError parse_error{};
-        QJsonDocument doc = QJsonDocument::fromJson(*response, &parse_error);
+        QJsonDocument doc = QJsonDocument::fromJson(response, &parse_error);
         QJsonObject obj = doc.object();
         if (parse_error.error != QJsonParseError::NoError) {
-            qWarning() << "Error while parsing JSON response from Technic at " << parse_error.offset
-                       << " reason: " << parse_error.errorString();
-            qWarning() << *response;
+            qWarning() << "Error while parsing JSON response from Technic at" << parse_error.offset
+                       << "reason:" << parse_error.errorString();
+            qWarning() << response;
             return;
         }
         if (!obj.contains("url")) {
@@ -211,7 +216,7 @@ void TechnicPage::suggestCurrent()
 
         metadataLoaded();
     });
-    connect(jobPtr.get(), &NetJob::failed,
+    connect(jobPtr.get(), &NetJob::failed, this,
             [this](QString reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->exec(); });
 
     jobPtr = netJob;
@@ -260,10 +265,11 @@ void TechnicPage::metadataLoaded()
 
         auto netJob = makeShared<NetJob>(QString("Technic::SolderMeta(%1)").arg(current.name), APPLICATION->network());
         auto url = QString("%1/modpack/%2").arg(current.url, current.slug);
-        netJob->addNetAction(Net::ApiDownload::makeByteArray(QUrl(url), response));
+        auto [action, response] = Net::ApiRequest::makeByteArray(QUrl(url));
+        netJob->addNetAction(action);
 
-        connect(netJob.get(), &NetJob::succeeded, this, &TechnicPage::onSolderLoaded);
-        connect(jobPtr.get(), &NetJob::failed,
+        connect(netJob.get(), &NetJob::succeeded, this, [this, response] { onSolderLoaded(response); });
+        connect(jobPtr.get(), &NetJob::failed, this,
                 [this](QString reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->exec(); });
 
         jobPtr = netJob;
@@ -293,8 +299,10 @@ void TechnicPage::selectVersion()
     }
 }
 
-void TechnicPage::onSolderLoaded()
+void TechnicPage::onSolderLoaded(QByteArray* responsePtr)
 {
+    // NOTE(TheKodeToad): moving the response out to avoid it from being destroyed by jobPtr.reset()
+    QByteArray response = std::move(*responsePtr);
     jobPtr.reset();
 
     auto fallback = [this]() {
@@ -307,10 +315,10 @@ void TechnicPage::onSolderLoaded()
     current.versions.clear();
 
     QJsonParseError parse_error{};
-    auto doc = QJsonDocument::fromJson(*response, &parse_error);
+    auto doc = QJsonDocument::fromJson(response, &parse_error);
     if (parse_error.error != QJsonParseError::NoError) {
-        qWarning() << "Error while parsing JSON response from Solder at " << parse_error.offset << " reason: " << parse_error.errorString();
-        qWarning() << *response;
+        qWarning() << "Error while parsing JSON response from Solder at" << parse_error.offset << "reason:" << parse_error.errorString();
+        qWarning() << response;
         fallback();
         return;
     }

@@ -3,11 +3,11 @@
     "libnbtplusplus": {
       "flake": false,
       "locked": {
-        "lastModified": 1744811532,
-        "narHash": "sha256-qhmjaRkt+O7A+gu6HjUkl7QzOEb4r8y8vWZMG2R/C6o=",
+        "lastModified": 1772016279,
+        "narHash": "sha256-7itkptyjoRcXfGLwg1/jxajetZ3a4mDc66+w4X6yW8s=",
         "owner": "PrismLauncher",
         "repo": "libnbtplusplus",
-        "rev": "531449ba1c930c98e0bcf5d332b237a8566f9d78",
+        "rev": "687e43031df0dc641984b4256bcca50d5b3f7de3",
         "type": "github"
       },
       "original": {
@@ -18,18 +18,15 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1762977756,
-        "narHash": "sha256-4PqRErxfe+2toFJFgcRKZ0UI9NSIOJa+7RXVtBhy4KE=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "c5ae371f1a6a7fd27823bc500d9390b38c05fa55",
-        "type": "github"
+        "lastModified": 1786599213,
+        "narHash": "sha256-yjGG65gA1jORt0hWxjzrnw3AYkIn8EWolp8vezwXZ3I=",
+        "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixos/unstable/nixos-26.11pre1053317.0e251e24a4f2/nixexprs.tar.xz"
       },
       "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
+        "type": "tarball",
+        "url": "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz"
       }
     },
     "root": {
